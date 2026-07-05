@@ -5,7 +5,7 @@ Download GitHub release assets with automatic OS detection, hash verification, a
 ## Install
 
 ```
-mint install ryh/qaz@main
+mint install ryh/qaz
 ```
 
 ## Usage
