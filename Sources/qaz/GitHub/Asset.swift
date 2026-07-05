@@ -72,6 +72,10 @@ struct Asset: Codable, Identifiable, Sendable {
     var formattedSize: String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(size))
+        let sizeStr = formatter.string(fromByteCount: Int64(size))
+        if size == 0 && id < 0 {
+            return "\(sizeStr) (size unavailable for source archives)"
+        }
+        return sizeStr
     }
 }
