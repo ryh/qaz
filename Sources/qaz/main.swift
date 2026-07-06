@@ -4,6 +4,11 @@ import Foundation
 
 let args = Arguments.parse()
 
+if args.version {
+    print("qaz \(cliFullVersion)")
+    exit(0)
+}
+
 if args.help || !args.validate() {
     if !args.help {
         FileHandle.standardError.write(Data("Error: Invalid arguments\n\n".utf8))

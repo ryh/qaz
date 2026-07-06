@@ -11,6 +11,7 @@ struct Arguments: Sendable {
     let verbose: Bool
     let install: Bool
     let help: Bool
+    let version: Bool
 
     static func parse() -> Arguments {
         let args = CommandLine.arguments
@@ -22,6 +23,7 @@ struct Arguments: Sendable {
         var verbose = false
         var install = false
         var help = false
+        var version = false
 
         var i = 1
         while i < args.count {
@@ -38,6 +40,8 @@ struct Arguments: Sendable {
                 install = true
             case "-h", "--help":
                 help = true
+            case "--version":
+                version = true
             case "-t", "--tag":
                 i += 1
                 if i < args.count {
@@ -85,7 +89,8 @@ struct Arguments: Sendable {
             interactive: interactive,
             verbose: verbose,
             install: install,
-            help: help
+            help: help,
+            version: version
         )
     }
 
@@ -129,7 +134,7 @@ struct Arguments: Sendable {
     }
 
     func validate() -> Bool {
-        if help {
+        if help || version {
             return true
         }
         guard let owner = owner, let repo = repo else {

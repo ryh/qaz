@@ -22,6 +22,7 @@ enum Help {
         -d, --directory DIR Download to directory (default: current)
         -I, --install       Install after download
         -h, --help          Show this help
+        --version           Show version
 
     EXAMPLES:
         qaz BurntSushi/ripgrep

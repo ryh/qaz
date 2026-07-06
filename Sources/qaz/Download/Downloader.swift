@@ -1,11 +1,9 @@
 import Foundation
 
-actor Downloader: NSObject, URLSessionDownloadDelegate {
+actor Downloader {
     private var receivedBytes: Int64 = 0
     private var totalBytes: Int64 = 0
     private var progressHandler: (@Sendable (Progress) -> Void)?
-    private var fileURL: URL?
-    private var continuation: CheckedContinuation<String, Error>?
 
     struct Progress: Sendable {
         let received: Int64
@@ -19,57 +17,26 @@ actor Downloader: NSObject, URLSessionDownloadDelegate {
         }
 
         let name = fileName ?? downloadURL.lastPathComponent
-        self.fileURL = URL(fileURLWithPath: directory).appendingPathComponent(name)
+        let fileURL = URL(fileURLWithPath: directory).appendingPathComponent(name)
         self.progressHandler = progressHandler
         self.receivedBytes = 0
         self.totalBytes = 0
 
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
 
-        let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+        let delegate = DownloadDelegate(fileURL: fileURL) { [weak self] received, total in
+            guard let self else { return }
+            Task { @Sendable [weak self] in
+                await self?.handleProgress(totalBytesWritten: received, totalBytesExpectedToWrite: total)
+            }
+        }
+
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         let request = URLRequest(url: downloadURL)
 
         return try await withCheckedThrowingContinuation { continuation in
-            Task { @Sendable [weak self] in
-                await self?.setContinuation(continuation)
-            }
+            delegate.setContinuation(continuation)
             session.downloadTask(with: request).resume()
-        }
-    }
-
-    private func setContinuation(_ c: CheckedContinuation<String, Error>) {
-        self.continuation = c
-    }
-
-    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        Task { @Sendable in
-            await self.handleDownloadComplete(location: location)
-        }
-    }
-
-    private func handleDownloadComplete(location: URL) {
-        guard let fileURL = fileURL else {
-            continuation?.resume(throwing: URLError(.badURL))
-            continuation = nil
-            return
-        }
-
-        do {
-            let fm = FileManager.default
-            if fm.fileExists(atPath: fileURL.path) {
-                try fm.removeItem(at: fileURL)
-            }
-            try fm.moveItem(at: location, to: fileURL)
-            continuation?.resume(returning: fileURL.path)
-        } catch {
-            continuation?.resume(throwing: error)
-        }
-        continuation = nil
-    }
-
-    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        Task { @Sendable in
-            await self.handleProgress(totalBytesWritten: totalBytesWritten, totalBytesExpectedToWrite: totalBytesExpectedToWrite)
         }
     }
 
@@ -93,17 +60,44 @@ actor Downloader: NSObject, URLSessionDownloadDelegate {
         }
         progressHandler?(progress)
     }
+}
 
-    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error = error {
-            Task { @Sendable in
-                await self.handleError(error)
-            }
-        }
+final private class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let fileURL: URL
+    nonisolated(unsafe) private var continuation: CheckedContinuation<String, Error>?
+    private let progressCallback: @Sendable (Int64, Int64) -> Void
+
+    init(fileURL: URL, progressCallback: @escaping @Sendable (Int64, Int64) -> Void) {
+        self.fileURL = fileURL
+        self.progressCallback = progressCallback
     }
 
-    private func handleError(_ error: Error) {
-        continuation?.resume(throwing: error)
+    func setContinuation(_ c: CheckedContinuation<String, Error>) {
+        self.continuation = c
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        do {
+            let fm = FileManager.default
+            if fm.fileExists(atPath: fileURL.path) {
+                try fm.removeItem(at: fileURL)
+            }
+            try fm.moveItem(at: location, to: fileURL)
+            continuation?.resume(returning: fileURL.path)
+        } catch {
+            continuation?.resume(throwing: error)
+        }
         continuation = nil
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        progressCallback(totalBytesWritten, totalBytesExpectedToWrite)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            continuation?.resume(throwing: error)
+            continuation = nil
+        }
     }
 }
