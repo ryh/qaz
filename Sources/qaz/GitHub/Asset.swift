@@ -32,6 +32,9 @@ struct Asset: Codable, Identifiable, Sendable {
         if lower.contains("win") || lower.contains("windows") {
             return "Windows"
         }
+        if lower.contains("freebsd") || lower.contains("openbsd") || lower.contains("netbsd") {
+            return "BSD"
+        }
         return ""
     }
 
@@ -43,12 +46,26 @@ struct Asset: Codable, Identifiable, Sendable {
         if lower.contains("x86_64") || lower.contains("amd64") || lower.contains("x64") {
             return "x86_64"
         }
+        if lower.contains("armv6") || lower.contains("armv7") || lower.contains("armhf") {
+            return "arm"
+        }
+        if lower.contains("32-bit") || lower.contains("i386") || lower.contains("i686") {
+            return "x86"
+        }
         return ""
     }
 
     var isRecommended: Bool {
+        guard size >= 100_000 else {
+            return false
+        }
+
         let platform = platformHint
         let arch = architectureHint
+
+        guard !platform.isEmpty || !arch.isEmpty else {
+            return false
+        }
 
         #if os(macOS)
         guard platform == "macOS" || platform.isEmpty else {
